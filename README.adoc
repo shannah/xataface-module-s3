@@ -1,0 +1,42 @@
+= Xataface S3 Module
+
+Adds support for storing file uploads on Amazon's Simple Storage Service (S3).
+
+== Installation
+
+Copy this directory into your application's "modules" directory, so that the path is:
+
+----
+APPROOT/modules/s3
+----
+
+Add the following into the `_modules` section of your app's conf.ini file.
+
+----
+modules_s3=modules/s3/s3.php
+----
+
+And add a section to your app's conf.ini file named `modules_s3` :
+
+.modules_s3 section in the conf.ini file should contain your AWS credentials.
+----
+[modules_s3]
+  key=YOURKEY
+  secret=YOUR_SECRET_KEY
+----
+
+== Using S3 to Store File Uploads for a Field
+
+Given a column `myfile` in table `mytable`.  `myfile` should be a `VARCHAR` or `TEXT` column type of sufficient length to store the concatenation of an md5 hash, the mimetype, and the file name.  Recommend either `VARCHAR(255)` or `TEXT`.  Add the following to the `tables/mytable/fields.ini` file:
+
+.The fields.ini file for `mytable`
+----
+[myfile]
+  Type=container
+  s3.bucket=MyBucketName
+----
+
+
+
+
+
