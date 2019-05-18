@@ -166,7 +166,7 @@ class modules_s3 {
         if (@$field['s3.key.prefix']) {
             $keyPrefix = $field['s3.key.prefix'];
         }
-        $key = $keyPrefix.md5($record->getId().'#'.$field['name']);
+        $key = df_uuid();
 
         $result = $this->upload_to_s3($tmpPath, $fileName, $field['s3.bucket'], $key);
         
