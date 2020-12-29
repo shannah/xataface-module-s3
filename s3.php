@@ -272,7 +272,7 @@ class modules_s3 {
 		if (@$field['transform']) {
 
 			$commands = array_map('trim', explode(';', $field['transform']));
-			print_r($commands);
+			//print_r($commands);
 			foreach ($commands as $command) {
 				if (!trim($command)) {
 					continue;
