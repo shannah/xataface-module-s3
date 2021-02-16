@@ -229,7 +229,7 @@ class modules_s3 {
         
         $request = $s3Client->createPresignedRequest($cmd, '+20 minutes');
         $url = (string)$request->getUri();
-        header('Location: '.$url);
+        Dataface_Application::getInstance()->redirect($url);
         
     }
 
