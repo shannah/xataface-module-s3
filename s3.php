@@ -228,8 +228,11 @@ class modules_s3 {
         ]);
         
         $request = $s3Client->createPresignedRequest($cmd, '+20 minutes');
+        $app = Dataface_Application::getInstance();
+        $app->setCacheExpiry(19 * 60); // Set the cache expiry to be one minute less than the s3 expiry
+        
         $url = (string)$request->getUri();
-        Dataface_Application::getInstance()->redirect($url);
+        $app->redirect($url);
         
     }
 
