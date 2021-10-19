@@ -402,20 +402,31 @@ class modules_s3 {
         ]);
     }
     
-    public function upload_to_s3($file, $filename, $bucket, $key) {
+    public function upload_to_s3($file, $filename, $bucket, $key, $content=null, $params = []) {
 
         
         $s3 = $this->s3();
 
         // Send a PutObject request and get the result object.
         //$key = '-- your filename --';
+        if (!empty($file)) {
+            $result = $s3->putObject([
+                'Bucket' => $bucket,
+                'Key'    => $key,
+                //'Body'   => 'this is the body!',
+                'SourceFile' => $file
+            ]);
+        } else {
+            $p = array_merge($params, [
+                'Bucket' => $bucket,
+                'Key'    => $key,
+                'Body'   => $content,
+            ]) ;
+            
+            $result = $s3->putObject($p);
+        }
 
-        $result = $s3->putObject([
-            'Bucket' => $bucket,
-            'Key'    => $key,
-            //'Body'   => 'this is the body!',
-            'SourceFile' => $file
-        ]);
+        
         // Print the body of the result by indexing into the result object.
         return $result['ObjectURL'];
     }
