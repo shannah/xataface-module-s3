@@ -63,6 +63,29 @@ Given a column `myfile` in table `mytable`.  `myfile` should be a `VARCHAR` or `
 ----
 
 
+== Fields.ini directives:
+
+s3.bucket::
+The s3 bucket to use for storage.
+
+s3.key.prefix::
+Value to prefix to s3 object keys.  E.g. If you want all objects to be placed in a subfolder.  E.g. `s3.key.prefix=images/`.
+
+s3.public::
+If present and set to "1", this will make the object public in S3 so that it uses the s3 URL directly.  By default s3 objects are private, and the getBlob action is used for the URL, which redirects to a time-limited signed request on S3.
+
+== Conf.ini directives
+
+Conf.ini settings all go in the `[modules_s3]` section of the conf.ini file.  Options are:
+
+key::
+Your S3 API key
+
+secret::
+Your S3 API secret
+
+region::
+Your S3 region.  E.g. "us-east-1"
 
 
 

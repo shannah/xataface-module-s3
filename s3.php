@@ -41,6 +41,7 @@ class modules_s3 {
         $app->registerEventListener('Dataface_Record.getMimetype', array(&$this, 'getMimetype'));
         $app->registerEventListener('afterDelete', array(&$this, 'afterDelete'));
 		$app->registerEventListener('Dataface_Record.getThumbnailTypes', array(&$this, 'getThumbnailTypes'));
+        $app->registerEventListener('Record::display', array(&$this, 'display'));
     }
 	
 	public function getThumbnailTypes($event) {
@@ -66,6 +67,34 @@ class modules_s3 {
 		}
 
 	}
+    
+    public function display($event) {
+        // Handles the 'Record::display' event which is triggered when trying
+        // to get the display value of a field.
+        $field =& $event->field;
+        
+        
+        
+        if (@$field['s3.public'] and @$field['Type'] == 'container' and @$field['s3.bucket']) {
+            //$table = $event->table;
+            $record = $event->record;
+            $value = $event->value;
+            $thumb = null;
+            if (!empty($event->thumb)) {
+                $thumb = $event->thumb;
+            }
+            
+            // We only override the display for fields that have s3.public
+            // Other s3 fields will process the handleGetBlob event.
+            
+            $fieldValue = $record->val($field['name']);
+            if (empty($fieldValue)) return;
+            $valArr = $this->extractValue($fieldValue, $thumb);
+            $event->value = 'https://' . $field['s3.bucket'] . '.s3.amazonaws.com/'.rawurlencode($valArr['key']);
+            
+        
+        }
+    }
 
     public function afterDelete($params) {
         $record =& $params[0];
@@ -170,23 +199,8 @@ class modules_s3 {
             }
         }
     }
-
-    public function handleGetBlob($event) {
-        $table = $event->table;
-        $field = $event->field;
-        $record = $event->record;
-		$request = $event->request;
-		$thumb = @$request['-thumb'];
-		if ($thumb == 'default') {
-			$thumb = null;
-		}
-        if (!@$field['s3.bucket'] or $event->consumed) {
-            return;
-        }
-        
-        $event->consumed = true;
-        
-        $val = $record->val($field['name']);
+    
+    private function extractValue($val, $thumb = null) {
         $parts = explode(' ', $val);
         $key = $parts[0];
         $mimetype = $parts[1];
@@ -214,7 +228,46 @@ class modules_s3 {
 		if ($thumb) {
 			$key = $key . '_thumb_' . $thumb;
 		}
-		
+        return [
+            'key' => $key,
+            'mimetype' => $mimetype,
+            'fname' => $fname,
+            'region' => $region,
+            'thumb' => $thumb
+        ];
+    }
+
+    public function handleGetBlob($event) {
+        
+        // Event handler for the handleGetBlob event which is fired by Xataface
+        // in the getBlob action.  This should redirect the user to the file.
+        // Event structure:
+        //  table => Dataface_Table object
+        //  field => Field definition reference.  Associative array.
+        //  record => Reference to Dataface_Record object.
+        //  request => Reference to HTTP request assoc array.
+        //  consumed => Input and Output boolean set to true if the event is handled.
+        $table = $event->table;
+        $field = $event->field;
+        $record = $event->record;
+		$request = $event->request;
+		$thumb = @$request['-thumb'];
+		if ($thumb == 'default') {
+			$thumb = null;
+		}
+        if (!@$field['s3.bucket'] or $event->consumed) {
+            return;
+        }
+        
+        $event->consumed = true;
+        
+        $val = $record->val($field['name']);
+        $valArr = $this->extractValue($val, $thumb);
+		$key = $valArr['key'];
+        $thumb = $valArr['thumb'];
+        $region = $valArr['region'];
+        $fname = $valArr['fname'];
+        $mimetype = $valArr['mimetype'];
         $s3Client = $this->s3(['region' => $region]);
         $disposition = 'attachment; filename="'.$fname.'"';
         if ($record->isImage($field['name'])) {
@@ -237,18 +290,29 @@ class modules_s3 {
     }
 
     public function handleFileUpload($event) {
-
+        // Handles the 'handleFileUpload' event.
+        // Event object structure:
+        //  file_path => the local path to the file
+        //  file_name => the local file name
+        //  table => the Dataface_Table object
+        //  field => reference to the field definition associative array
+        //  out => Output string specifying the value to save in the 
+        //      database.
+        //  consumed => Output boolean set to true if the event is handled.
         $tmpPath = $event->file_path;
         $fileName = $event->file_name;
         $record = $event->record;
         $table = $event->table;
         $field =& $event->field;
+        
 
         if (!@$field['s3.bucket'] or $event->consumed) {
             // If no bucket is specified
             // we just do nothing
             return;
         }
+        $public = @$field['s3.public'];
+        
         $event->consumed = true;
         $del = $table->getDelegate();
 
@@ -257,8 +321,11 @@ class modules_s3 {
             $keyPrefix = $field['s3.key.prefix'];
         }
         $key = df_uuid();
-
-        $result = $this->upload_to_s3($tmpPath, $fileName, $field['s3.bucket'], $key);
+        $params = [];
+        if ($public) {
+            $params['ACL'] = 'public-read';
+        }
+        $result = $this->upload_to_s3($tmpPath, $fileName, $field['s3.bucket'], $key, null, $params);
         
         $mimetype = $event->mimetype;
         if (function_exists('mime_content_type')) {
@@ -329,7 +396,7 @@ class modules_s3 {
 						// we fit the image to the given dimensions
 						$result = $crop->fit($tmpPath, $thumbPath, $maxWidth, $maxHeight, $mimetype);
 						if ($result) {
-							$result = $this->upload_to_s3($thumbPath, $fileName, $field['s3.bucket'], $thumbKey);
+							$result = $this->upload_to_s3($thumbPath, $fileName, $field['s3.bucket'], $thumbKey, null, $params);
 							$cropped = $result;
 						}
 						
@@ -339,7 +406,7 @@ class modules_s3 {
 						$result = $crop->fill($tmpPath, $thumbPath, $maxWidth, $maxHeight, $mimetype);
 						//exit;
 						if ($result) {
-							$result = $this->upload_to_s3($thumbPath, $fileName, $field['s3.bucket'], $thumbKey);
+							$result = $this->upload_to_s3($thumbPath, $fileName, $field['s3.bucket'], $thumbKey, null, $params);
 							$cropped = $result;
 						} else {
 							throw new Exception("Failed to fill thumbnail: $thumbPath, $fileName, $thumbKey");
@@ -410,12 +477,15 @@ class modules_s3 {
         // Send a PutObject request and get the result object.
         //$key = '-- your filename --';
         if (!empty($file)) {
-            $result = $s3->putObject([
-                'Bucket' => $bucket,
-                'Key'    => $key,
-                //'Body'   => 'this is the body!',
-                'SourceFile' => $file
+            //'ACL' => 'public-read'
+            $p = array_merge(
+                $params, [
+                    'Bucket' => $bucket,
+                    'Key'    => $key,
+                    //'Body'   => 'this is the body!',
+                    'SourceFile' => $file
             ]);
+            $result = $s3->putObject($p);
         } else {
             $p = array_merge($params, [
                 'Bucket' => $bucket,
